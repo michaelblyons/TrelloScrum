@@ -47,17 +47,17 @@ var obsConfig = { childList: true, characterData: true, attributes: false, subtr
 var _pointSeq = ['?', 0, .5, 1, 2, 3, 5, 8, 13, 21];
 //attributes representing points values for card
 var _pointsAttr = ['cpoints', 'points'];
-//disable badges
-var _disableBadges = false;
 
 // All settings and their defaults.
 var S4T_SETTINGS = [];
 var SETTING_NAME_LINK_STYLE = "burndownLinkStyle";
 var SETTING_NAME_ESTIMATES = "estimatesSequence";
-var S4T_ALL_SETTINGS = [SETTING_NAME_LINK_STYLE, SETTING_NAME_ESTIMATES];
+var SETTING_NAME_DISABLEBADGES = "disableBadges";
+var S4T_ALL_SETTINGS = [SETTING_NAME_LINK_STYLE, SETTING_NAME_ESTIMATES, SETTING_NAME_DISABLEBADGES];
 var S4T_SETTING_DEFAULTS = {};
 S4T_SETTING_DEFAULTS[SETTING_NAME_LINK_STYLE] = 'full';
 S4T_SETTING_DEFAULTS[SETTING_NAME_ESTIMATES] = _pointSeq.join();
+S4T_SETTING_DEFAULTS[SETTING_NAME_DISABLEBADGES] = false;
 refreshSettings(); // get the settings right away (may take a little bit if using Chrome cloud storage)
 
 //internals
@@ -281,6 +281,7 @@ function showSettings()
 		// Load the current settings (with defaults in case Settings haven't been set).
 		var setting_link = S4T_SETTINGS[SETTING_NAME_LINK_STYLE];
 		var setting_estimateSeq = S4T_SETTINGS[SETTING_NAME_ESTIMATES];
+		var setting_disableBadges = S4T_SETTINGS[SETTING_NAME_DISABLEBADGES];
 	
 		var settingsDiv = $('<div/>', {style: "padding:0px 10px;font-family:'Helvetica Neue', Arial, Helvetica, sans-serif;"});
 		var iframeHeader = $('<h3/>', {style: 'text-align: center;'});
@@ -342,12 +343,26 @@ function showSettings()
 											});
 			fieldset_estimateButtons.append(restoreDefaultsButton);
 
+		// Whether to use badgeless display.
+		var fieldset_disableBadges = $('<fieldset/>', {style: 'margin-top:5px'});
+		var legend_disableBadges = $('<legend/>');
+		legend_disableBadges.text("Enable Badgeless Display");
+		fieldset_disableBadges.append(legend_disableBadges);
+			var badgelessCheckboxFieldId = 'disableBadges';
+			var badgelessCheckbox = $('<input/>', {id: badgelessCheckboxFieldId, type: 'checkbox', checked: setting_disableBadges});
+			fieldset_disableBadges.append(badgelessCheckbox);
+			var badgelessCheckboxLabel = $('<label/>', {for: badgelessCheckboxFieldId, text:'Use "5/6 Card Name" format and disable card badges.'})
+			fieldset_disableBadges.append(badgelessCheckboxLabel);
+
 		var saveButton = $('<button/>', {style:'margin-top:5px'}).text('Save Settings').click(function(e){
 			e.preventDefault();
+
+			var setting_disableBadges_temp = S4T_SETTINGS[SETTING_NAME_DISABLEBADGES];
 
 			// Save the settings (persists them using Chrome cloud, LocalStorage, or Cookies - in that order of preference if available).
 			S4T_SETTINGS[SETTING_NAME_LINK_STYLE] = $('iframe').contents().find('input:radio[name='+burndownLinkSetting_radioName+']:checked').val();
 			S4T_SETTINGS[SETTING_NAME_ESTIMATES] = $('iframe').contents().find('#'+estimateFieldId).val();
+			S4T_SETTINGS[SETTING_NAME_DISABLEBADGES] = $('iframe').contents().find('#'+badgelessCheckboxFieldId).prop('checked');
 
 			// Persist all settings.
 			$.each(S4T_ALL_SETTINGS, function(i, settingName){
@@ -356,6 +371,12 @@ function showSettings()
 
 			// Allow the UI to update itself as needed.
 			onSettingsUpdated();
+
+			// If the display type has changed, recalc the list
+			// BUG: Doesn't work. Requires page refresh anyway
+			if(setting_disableBadges_temp != S4T_SETTINGS[SETTING_NAME_DISABLEBADGES]){
+				calcListPoints();
+			}
 		});
 		var savedIndicator = $('<span/>', {id: 's4tSaved', style: 'color:#080;background-color:#afa;font-weight:bold;display:none;margin-left:10px'})
 									.text("Saved!");
@@ -363,6 +384,7 @@ function showSettings()
 		// Set up the form (all added down here to be easier to change the order).
 		settingsForm.append(fieldset_burndownLink);
 		settingsForm.append(fieldset_estimateButtons);
+		settingsForm.append(fieldset_disableBadges);
 		settingsForm.append(saveButton);
 		settingsForm.append(savedIndicator);
 	}
@@ -389,7 +411,7 @@ function showSettings()
 
 	// Trello swallows normal input, so things like checkboxes and radio buttons don't work right... so we stuff everything in an iframe.
 	var iframeObj = $('<iframe/>', {frameborder: '0',
-						 style: 'width: 670px; height: 528px;', /* 512 was fine on Chrome, but FF requires 528 to avoid scrollbars */
+						 style: 'width: 670px; height: 560px;', /* 512 was fine on Chrome, but FF requires 528 to avoid scrollbars */
 						 id: settingsFrameId,
 	});
 	$windowWrapper = $('.window-wrapper');
@@ -585,7 +607,7 @@ function ListCard(el, identifier){
 
 	var points=-1,
 		consumed=identifier!=='points',
-		regexp=_disableBadges?regLeading:(consumed?regC:reg),
+		regexp=S4T_SETTINGS[SETTING_NAME_DISABLEBADGES]?regLeading:(consumed?regC:reg),
 		parsed,
 		that=this,
 		busy=false,
@@ -610,7 +632,7 @@ function ListCard(el, identifier){
 			var titleTextContent = $title[0].childNodes[1].textContent;
 			if(titleTextContent) el._title = titleTextContent;
 			
-			if(_disableBadges){
+			if(S4T_SETTINGS[SETTING_NAME_DISABLEBADGES]){
 				parsed=titleTextContent.match(regexp);
 				points=parsed?(consumed?parsed[1]:parsed[2]):-1
 			}
@@ -631,7 +653,7 @@ function ListCard(el, identifier){
 
 			clearTimeout(to2);
 			to2 = setTimeout(function(){
-				if(_disableBadges){
+				if(!S4T_SETTINGS[SETTING_NAME_DISABLEBADGES]){
 					// Add the badge (for this point-type: regular or consumed) to the badges div.
 					$badge
 						.text(that.points)
@@ -709,7 +731,7 @@ function showPointPicker(location) {
 		var text = $text.val();
 
 		// replace our new
-		$text[0].value=_disableBadges
+		$text[0].value=S4T_SETTINGS[SETTING_NAME_DISABLEBADGES]
 							?(regLeading.test(text)?text.replace(regLeading, '$1/'+value+' '):'0/'+value+' ' + text)
 							:(text.match(reg)?text.replace(reg, '('+value+') '):'('+value+') ' + text);
 
